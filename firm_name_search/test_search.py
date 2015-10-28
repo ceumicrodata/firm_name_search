@@ -1,10 +1,11 @@
 # coding: utf-8
 from __future__ import print_function
 from __future__ import unicode_literals
+from __future__ import absolute_import
 
 import fixtures
 from testtools import TestCase
-import search as m
+from . import search as m
 
 import os
 import textwrap

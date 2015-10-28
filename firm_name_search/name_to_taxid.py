@@ -53,66 +53,51 @@ class Scorer(object):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Add tax_id to input by searching for the firm name'
-    )
+        description='Add tax_id to input by searching for the firm name')
     parser.add_argument(
         '--index', default='complex_firms.sqlite',
-        help='sqlite file to use as index (default: %(default)s)'
-    )
+        help='sqlite file to use as index (default: %(default)s)')
     parser.add_argument(
         'firm_name_field',
-        help='firm name field name in input csv'
-    )
+        help='firm name field name in input csv')
     parser.add_argument(
         'input', type=FileSource,
         # default=StdinSource(),
-        help='input file',
-    )
+        help='input file')
     parser.add_argument(
         'output', type=FileSource,
         # default=StdoutSource(),
-        help='output csv file',
-    )
+        help='output csv file')
     parser.add_argument(
         '--taxid',
         default='tax_id',
-        help='output field for found tax_id (default: %(default)s)',
-    )
+        help='output field for found tax_id (default: %(default)s)')
     parser.add_argument(
         '--text_score',
         default='text_score',
         help=(
             '''output field for found tax_id's text score
-            (default: %(default)s)'''
-        ),
-    )
+            (default: %(default)s)'''))
     parser.add_argument(
         '--org_score',
         default='org_score',
         help=(
             '''output field for found tax_id's organization score
-            (default: %(default)s)'''
-        ),
-    )
+            (default: %(default)s)'''))
     parser.add_argument(
         '--found_name',
         default='found_name',
         help=(
-            '''output field for the best matching name (default: %(default)s)'''
-        ),
-    )
+            '''output field for the best matching name (default: %(default)s)'''))
     parser.add_argument(
         '--rovat-0-csv', default='rovat_0.csv',
-        help='needed for creating the index (default: %(default)s)'
-        )
+        help='needed for creating the index (default: %(default)s)')
     parser.add_argument(
         '--rovat-2-csv', default='rovat_2.csv',
-        help='needed for creating the index (default: %(default)s)'
-        )
+        help='needed for creating the index (default: %(default)s)')
     parser.add_argument(
         '--rovat-3-csv', default='rovat_3.csv',
-        help='needed for creating the index (default: %(default)s)'
-        )
+        help='needed for creating the index (default: %(default)s)')
     args = parser.parse_args()
 
     petl.io.tocsv(_find_firms(args), args.output, encoding='utf-8')
