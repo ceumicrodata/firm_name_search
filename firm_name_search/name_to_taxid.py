@@ -7,9 +7,8 @@ from __future__ import division
 import argparse
 import difflib
 import operator
-import sys
 import petl
-from petl.io.sources import FileSource, StdinSource, StdoutSource
+from petl.io.sources import FileSource
 
 from .search import NameToTaxidsIndex, TaxidToNamesIndex
 from .search import normalize_hun_firm_name
@@ -62,11 +61,9 @@ def main():
         help='firm name field name in input csv')
     parser.add_argument(
         'input', type=FileSource,
-        # default=StdinSource(),
         help='input file')
     parser.add_argument(
         'output', type=FileSource,
-        # default=StdoutSource(),
         help='output csv file')
     parser.add_argument(
         '--taxid',
@@ -89,50 +86,25 @@ def main():
         default='found_name',
         help=(
             '''output field for the best matching name (default: %(default)s)'''))
-    parser.add_argument(
-        '--rovat-0-csv', default='rovat_0.csv',
-        help='needed for creating the index (default: %(default)s)')
-    parser.add_argument(
-        '--rovat-2-csv', default='rovat_2.csv',
-        help='needed for creating the index (default: %(default)s)')
-    parser.add_argument(
-        '--rovat-3-csv', default='rovat_3.csv',
-        help='needed for creating the index (default: %(default)s)')
     args = parser.parse_args()
 
     petl.io.tocsv(_find_firms(args), args.output, encoding='utf-8')
 
 
 def get_taxid_to_names(args):
-    taxid_to_names = TaxidToNamesIndex(
-        location=args.index,
-        inputs=dict(
-            rovat_0_csv=args.rovat_0_csv,
-            rovat_2_csv=args.rovat_2_csv,
-            rovat_3_csv=args.rovat_3_csv),
-        normalize=normalize_hun_firm_name,
-    ).find
+    taxid_to_names = TaxidToNamesIndex(location=args.index)
+    taxid_to_names.open()
 
-    return taxid_to_names
+    return taxid_to_names.find
 
 
 def get_name_to_taxids(args):
-    name_to_taxids = NameToTaxidsIndex(
-        location=args.index,
-        inputs=dict(
-            rovat_0_csv=args.rovat_0_csv,
-            rovat_2_csv=args.rovat_2_csv,
-            rovat_3_csv=args.rovat_3_csv),
-        normalize=normalize_hun_firm_name,
-    ).find
+    name_to_taxids = NameToTaxidsIndex(location=args.index)
+    name_to_taxids.open()
+    _find = name_to_taxids.find
 
     def find(name):
-        matches = name_to_taxids(name)
-        tax_ids = set(
-            firm_id.tax_id
-            for firm_id in matches
-        )
-        return tax_ids
+        return set(firm_id.tax_id for firm_id in _find(name))
     return find
 
 

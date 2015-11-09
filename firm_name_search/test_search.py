@@ -6,6 +6,7 @@ from __future__ import absolute_import
 import fixtures
 from testtools import TestCase
 from . import search as m
+from .build_index import create as build_index
 
 import os
 import textwrap
@@ -85,10 +86,7 @@ class ComplexIndex(fixtures.Fixture):
                 inputs=dict(
                     rovat_0_csv='rovat_0.csv',
                     rovat_2_csv='rovat_2.csv',
-                    rovat_3_csv='rovat_3.csv',
-                ),
-                normalize=m.split_on_quote,
-            )
+                    rovat_3_csv='rovat_3.csv'))
 
 
 class TestNameToTaxidsIndex(TestCase):
@@ -109,40 +107,35 @@ class TestNameToTaxidsIndex(TestCase):
         self.useFixture(TempWorkingDir())
         self.useFixture(RovatCSVs())
 
-    def silently_create_index(self):
+    def create_index(self):
+        location = 'complex-firms.sqlite'
         with RedirectStderr():
-            self.index = m.NameToTaxidsIndex(
-                location='complex-firms.sqlite',
+            build_index(
+                location,
                 inputs=dict(
                     rovat_0_csv='rovat_0.csv',
                     rovat_2_csv='rovat_2.csv',
-                    rovat_3_csv='rovat_3.csv',
-                ),
-                normalize=m.split_on_quote,
-            )
+                    rovat_3_csv='rovat_3.csv',))
+            self.index = m.NameToTaxidsIndex(location='complex-firms.sqlite')
 
-    when_an_index_is_created_for_the_first_time = silently_create_index
+    when_an_index_is_created_for_the_first_time = create_index
 
     def then_index_file_is_created(self):
         self.assertTrue(os.path.exists('complex-firms.sqlite'))
 
     def given_a_newly_created_index(self):
         self.given_complex_rovat_csvs_as_files()
-        self.silently_create_index()
+        self.create_index()
 
     def when_opening_the_index(self):
-        self.index = m.NameToTaxidsIndex(
-            location='complex-firms.sqlite',
-            inputs={},
-            normalize=m.split_on_quote,
-        )
+        self.index = m.NameToTaxidsIndex(location='complex-firms.sqlite')
+        self.index.open()
 
     def then_firms_can_be_found(self):
         tax_ids = self.index.find('Ganz')
         self.assertEqual(
             set([m.FirmId(tax_id='10001789'), m.FirmId(tax_id='10001459')]),
-            tax_ids
-        )
+            tax_ids)
 
         tax_ids = self.index.find('Ganz Villamossági Művek')
         self.assertEqual(set([m.FirmId(tax_id='10001789')]), tax_ids)
@@ -166,49 +159,43 @@ class TestTaxidToNamesIndex(TestCase):
         self.useFixture(TempWorkingDir())
         self.useFixture(RovatCSVs())
 
-    def silently_create_index(self):
+    def create_index(self):
+        location = 'complex-firms.sqlite'
         with RedirectStderr():
-            self.index = m.TaxidToNamesIndex(
-                location='complex-firms.sqlite',
+            build_index(
+                location,
                 inputs=dict(
                     rovat_0_csv='rovat_0.csv',
                     rovat_2_csv='rovat_2.csv',
-                    rovat_3_csv='rovat_3.csv',
-                ),
-                normalize=m.split_on_quote,
-            )
+                    rovat_3_csv='rovat_3.csv'))
+            self.index = m.TaxidToNamesIndex(location)
+            self.index.open()
 
-    when_an_index_is_created_for_the_first_time = silently_create_index
+    when_an_index_is_created_for_the_first_time = create_index
 
     def then_index_file_is_created(self):
         self.assertTrue(os.path.exists('complex-firms.sqlite'))
 
     def given_a_newly_created_index(self):
         self.given_complex_rovat_csvs_as_files()
-        self.silently_create_index()
+        self.create_index()
 
     def when_opening_the_index(self):
-        self.index = m.TaxidToNamesIndex(
-            location='complex-firms.sqlite',
-            inputs={},
-            normalize=m.split_on_quote,
-        )
+        self.index = m.TaxidToNamesIndex(location='complex-firms.sqlite')
+        self.index.open()
 
     def then_taxids_can_be_found(self):
         self.assertEqual(
             set(['Ganz Villamossági Művek']),
-            self.index.find('10001789')
-        )
+            self.index.find('10001789'))
 
         self.assertEqual(
             set([
                 'GANZ-DANUBIUS',
                 'GANZ-DANUBIUS Hajó- és Darugyár',
                 'M.H.D.',
-                'Magyar Hajó- és Darugyár'
-            ]),
-            self.index.find('10001459')
-        )
+                'Magyar Hajó- és Darugyár']),
+            self.index.find('10001459'))
 
 
 class Test_FirmId(TestCase):  # noqa
@@ -216,23 +203,19 @@ class Test_FirmId(TestCase):  # noqa
     def test_equality(self):
         self.assertEqual(
             m.FirmId(tax_id='tax_id'),
-            m.FirmId(tax_id='tax_id', pir=None)
-        )
+            m.FirmId(tax_id='tax_id', pir=None))
 
         self.assertNotEqual(
             m.FirmId(tax_id='tax_id'),
-            m.FirmId(tax_id='tax_id', pir='None')
-        )
+            m.FirmId(tax_id='tax_id', pir='None'))
 
         self.assertEqual(
             m.FirmId(pir='pir'),
-            m.FirmId(pir='pir', tax_id=None)
-        )
+            m.FirmId(pir='pir', tax_id=None))
 
         self.assertNotEqual(
             m.FirmId(pir='pir'),
-            m.FirmId(pir='pir', tax_id='None')
-        )
+            m.FirmId(pir='pir', tax_id='None'))
 
     def test_repr(self):
         self.assertEqual('PIR(1)', repr(m.FirmId(pir='1')))
