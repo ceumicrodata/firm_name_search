@@ -7,11 +7,13 @@ from __future__ import division
 import argparse
 import difflib
 import operator
+import os
 import petl
 from petl.io.sources import FileSource
+import sys
+import textwrap
 
 from .search import NameToTaxidsIndex, TaxidToNamesIndex
-from .search import normalize_hun_firm_name
 from .parse_firm_name import parse as parse_firm_name
 
 
@@ -50,9 +52,34 @@ class Scorer(object):
         return max_name
 
 
-def main():
+def _get_terminal_width():
+    try:
+        return int(os.environ['COLUMNS'])
+    except (KeyError, ValueError):
+        return 80
+
+
+def _wordwrap(text):
+    return textwrap.fill(textwrap.dedent(text), _get_terminal_width() - 2)
+
+
+def main(argv, version):
+    ww = _wordwrap
+
+    description = '\n'.join((
+        ww('Add tax_id to input by searching for the firm name'),
+        '',
+        ww(
+            '''\
+            NOTE: this program can recreate the index file used
+            for searching with
+            '''),
+        '    %(prog)s index ...',
+        ww('(usage details are in its separate --help message)'),
+        ))
     parser = argparse.ArgumentParser(
-        description='Add tax_id to input by searching for the firm name')
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=description)
     parser.add_argument(
         '--index', default='complex_firms.sqlite',
         help='sqlite file to use as index (default: %(default)s)')
@@ -60,10 +87,10 @@ def main():
         'firm_name_field',
         help='firm name field name in input csv')
     parser.add_argument(
-        'input', type=FileSource,
-        help='input file')
+        'input_csv', type=FileSource,
+        help='input csv file')
     parser.add_argument(
-        'output', type=FileSource,
+        'output_csv', type=FileSource,
         help='output csv file')
     parser.add_argument(
         '--taxid',
@@ -85,10 +112,17 @@ def main():
         '--found_name',
         default='found_name',
         help=(
-            '''output field for the best matching name (default: %(default)s)'''))
-    args = parser.parse_args()
+            '''
+            output field for the best matching name
+            (default: %(default)s)
+            '''))
+    parser.add_argument(
+        '-V', '--version', action='version',
+        version='%(prog)s {}'.format(version),
+        help='Show version info')
+    args = parser.parse_args(argv)
 
-    petl.io.tocsv(_find_firms(args), args.output, encoding='utf-8')
+    petl.io.tocsv(_find_firms(args), args.output_csv, encoding='utf-8')
 
 
 def get_taxid_to_names(args):
@@ -109,7 +143,7 @@ def get_name_to_taxids(args):
 
 
 def _find_firms(args):
-    input_source = petl.io.fromcsv(args.input, encoding='utf-8')
+    input_source = petl.io.fromcsv(args.input_csv, encoding='utf-8')
 
     input = iter(input_source)
     header = next(input)
@@ -143,4 +177,4 @@ def _find_firms(args):
 
 
 if __name__ == '__main__':
-    main()
+    main(sys.argv[1:], 'test-version')

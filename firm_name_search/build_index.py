@@ -5,37 +5,76 @@ from __future__ import absolute_import
 from __future__ import division
 
 import argparse
+from collections import namedtuple
+from glob import glob
+import operator
+import os
 import petl
 import sys
-import operator
-from collections import namedtuple
+
 from .db import SqliteConstantMap
 from .names import maybe_valid_name
 from .search import heads
 
 
-def main():
+def single_matching_file(pattern):
+    candidates = glob(pattern)
+    return candidates[0] if 1 == len(candidates) else None
+
+
+def error(parser, msg):
+    error_msg = 'ERROR: {}\n'.format(msg)
+    eye_magnet = '!!!!!  ' + '!' * len(msg) + '\n'
+    #
+    sys.stderr.write(eye_magnet)
+    sys.stderr.write(error_msg)
+    sys.stderr.write(eye_magnet)
+    sys.stderr.write('\n')
+    #
+    parser.print_help()
+    sys.exit(1)
+
+
+def verify_inputs(inputs, parser):
+    for key in inputs:
+        if inputs[key] is None:
+            error(
+                parser,
+                (
+                    '{} was not specified and there is' +
+                    ' no suitable default available'
+                ).format(key), parser)
+        if not os.path.exists(inputs[key]):
+            error(
+                parser,
+                '{} for {} is not a readable file'
+                .format(inputs[key], key))
+
+
+def main(argv, version):
     parser = argparse.ArgumentParser(
-        description='Add tax_id to input by searching for the firm name')
+        description='Create index for mapping between firm names and tax_id')
     parser.add_argument(
-        '--index', default='complex_firms.sqlite',
-        help='sqlite file to use as index (default: %(default)s)')
+        '--target', default='complex_firms.sqlite',
+        help='sqlite index file to create (default: %(default)s)')
     parser.add_argument(
-        '-0', '--rovat-0-csv', default='rovat_0.csv',
+        '-0', '--rovat-0-csv', default=single_matching_file('rovat_0.csv*'),
         help='needed for creating the index (default: %(default)s)')
     parser.add_argument(
-        '-2', '--rovat-2-csv', default='rovat_2.csv',
+        '-2', '--rovat-2-csv', default=single_matching_file('rovat_2.csv*'),
         help='needed for creating the index (default: %(default)s)')
     parser.add_argument(
-        '-3', '--rovat-3-csv', default='rovat_3.csv',
+        '-3', '--rovat-3-csv', default=single_matching_file('rovat_3.csv*'),
         help='needed for creating the index (default: %(default)s)')
-    args = parser.parse_args()
-    create(
-        index_file_path=args.index,
-        inputs=dict(
-            rovat_0_csv=args.rovat_0_csv,
-            rovat_2_csv=args.rovat_2_csv,
-            rovat_3_csv=args.rovat_3_csv))
+    args = parser.parse_args(argv)
+    inputs = dict(
+        rovat_0_csv=args.rovat_0_csv,
+        rovat_2_csv=args.rovat_2_csv,
+        rovat_3_csv=args.rovat_3_csv)
+    verify_inputs(inputs, parser)
+    if os.path.exists(args.target):
+        error(parser, 'Index file {} already exists'.format(args.target))
+    create(index_file_path=args.target, inputs=inputs)
 
 
 def read_csv(filename, *attrs, **names_to_extractors):
@@ -59,7 +98,8 @@ def read_csv(filename, *attrs, **names_to_extractors):
     header = next(csv)
     for row in csv:
         row_dict = dict(zip(header, row))
-        yield Record(*(get_simple_attrs(row_dict) + get_calculated_attrs(row_dict)))
+        yield Record(
+            *(get_simple_attrs(row_dict) + get_calculated_attrs(row_dict)))
 
 
 def log_to_stderr(msg):
@@ -75,11 +115,12 @@ def create(index_file_path, inputs, progress=log_to_stderr):
     tax_id_to_names.db = name_to_tax_ids.db
 
     # build db
-    progress('reading rovat_0.csv')
+    r0_filename = inputs['rovat_0_csv']
+    progress('reading {}'.format(r0_filename))
     cegid_to_taxid = {
         r.ceg_id: r.tax_id
         for r in read_csv(
-            inputs['rovat_0_csv'],
+            r0_filename,
             'ceg_id', tax_id=lambda row: row['adosz'][:8])}
 
     def populate(input):
@@ -111,4 +152,4 @@ def create(index_file_path, inputs, progress=log_to_stderr):
 
 
 if __name__ == '__main__':
-    main()
+    main(sys.argv[1:], 'test-version')

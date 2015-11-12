@@ -47,18 +47,15 @@ def task_build():
         return name
 
     name_to_taxids = 'name-to-taxids-{}'.format(timestamp())
-    build_index = 'build-index-{}'.format(timestamp())
 
     return dict(
         file_dep=['sources.zip'],
         actions=[
-            (make_zipapp, [unix(    name_to_taxids), UNIX_PREFIX,    'firm_name_search.name_to_taxid']),
-            (make_zipapp, [unix(    build_index),    UNIX_PREFIX,    'firm_name_search.build_index']),
-            (make_zipapp, [windows( name_to_taxids), WINDOWS_PREFIX, 'firm_name_search.name_to_taxid']),
-            (make_zipapp, [windows( build_index),    WINDOWS_PREFIX, 'firm_name_search.build_index'])],
+            (make_zipapp, [unix(    name_to_taxids), UNIX_PREFIX,    'firm_name_search.main']),
+            (make_zipapp, [windows( name_to_taxids), WINDOWS_PREFIX, 'firm_name_search.main'])],
         targets=[
-            unix(name_to_taxids), windows(name_to_taxids),
-            unix(build_index), windows(build_index)],
+            unix(name_to_taxids),
+            windows(name_to_taxids)],
         clean=True)
 
 
@@ -75,7 +72,7 @@ def git_clean():
 
 
 def make_zip():
-    run('pip install . -t _build')
+    run('pip install . -t _build --no-compile')
     # print(get_sources('_build').readlines())
     sources = subprocess.Popen(
         ['find',  '-name' , '*.py'], cwd='_build', stdout=subprocess.PIPE
@@ -103,7 +100,7 @@ WINDOWS_PREFIX = b'\r\n'.join((
 
 MAIN_PY = '''\
 from {module_path} import {main_function}
-{main_function}()
+{main_function}('{version}')
 '''
 
 
@@ -114,7 +111,8 @@ def make_zipapp(app_file, os_prefix, module_path, main_function='main'):
             '__main__.py',
             MAIN_PY.format(
                 module_path=module_path,
-                main_function=main_function))
+                main_function=main_function,
+                version='Version {}'.format(datetime.datetime.now())))
     with open(app_file, 'r+b') as f:
         app_zip = f.read()
         # rewrite with os_prefix
