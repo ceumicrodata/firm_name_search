@@ -5,6 +5,7 @@ from __future__ import absolute_import
 from __future__ import division
 
 import argparse
+from collections import namedtuple
 import difflib
 import operator
 import os
@@ -15,41 +16,6 @@ import textwrap
 
 from .search import NameToTaxidsIndex, TaxidToNamesIndex
 from .parse_firm_name import parse as parse_firm_name
-
-
-def text_score(text1, text2):
-    text1 = text1.lower()
-    text2 = text2.lower()
-    sm = difflib.SequenceMatcher(a=text1, b=text2)
-    return sm.ratio()
-
-
-class Scorer(object):
-
-    def __init__(self, name, taxid_to_names):
-        self.name = name
-        self.parsed = parse_firm_name(name)
-        self.taxid_to_names = taxid_to_names
-
-    def score(self, taxid):
-        max_name = ((-10, -10), '')
-        for name in self.taxid_to_names(taxid):
-            parsed = parse_firm_name(name)
-            # org_score
-            if self.parsed.organization is None:
-                # we *WERE NOT* given an initial organization
-                org_score = 1
-            elif parsed.organization is None:
-                # could not parse the organization
-                org_score = 0
-            elif self.parsed.organization == parsed.organization:
-                org_score = 2
-            else:
-                # do not match
-                org_score = -1
-            score = org_score, text_score(self.parsed.name, parsed.name)
-            max_name = max(max_name, (score, name))
-        return max_name
 
 
 def _get_terminal_width():
@@ -125,23 +91,6 @@ def main(argv, version):
     petl.io.tocsv(_find_firms(args), args.output_csv, encoding='utf-8')
 
 
-def get_taxid_to_names(args):
-    taxid_to_names = TaxidToNamesIndex(location=args.index)
-    taxid_to_names.open()
-
-    return taxid_to_names.find
-
-
-def get_name_to_taxids(args):
-    name_to_taxids = NameToTaxidsIndex(location=args.index)
-    name_to_taxids.open()
-    _find = name_to_taxids.find
-
-    def find(name):
-        return set(firm_id.tax_id for firm_id in _find(name))
-    return find
-
-
 def _find_firms(args):
     input_source = petl.io.fromcsv(args.input_csv, encoding='utf-8')
 
@@ -154,26 +103,89 @@ def _find_firms(args):
     assert args.found_name not in header
 
     get_firm_name = operator.itemgetter(header.index(args.firm_name_field))
-
-    taxid_to_names = get_taxid_to_names(args)
-    name_to_taxids = get_name_to_taxids(args)
+    find_complex = FirmFinder(args.index).find_complex
 
     yield (
-        tuple(header)
-        + (args.org_score, args.text_score, args.found_name, args.taxid))
+        tuple(header) +
+        (args.org_score, args.text_score, args.found_name, args.taxid))
 
     for row in input:
-        firm_name = get_firm_name(row)
-        scorer = Scorer(firm_name, taxid_to_names)
-        tax_ids = name_to_taxids(firm_name)
-        scored = sorted((scorer.score(tax_id), tax_id) for tax_id in tax_ids)
-        if scored:
-            ((org_score, text_score), found_name), tax_id = scored.pop()
-        else:
-            org_score, text_score, found_name = (-20, -20, '')
-            tax_id = None
+        match = find_complex(get_firm_name(row))
+        yield (
+            tuple(row) +
+            (match.org_score, match.text_score, match.found_name, match.tax_id))
 
-        yield tuple(row) + (org_score, text_score, found_name, tax_id)
+
+ComplexMatch = namedtuple('ComplexMatch', 'org_score text_score found_name tax_id')
+NO_MATCH = ComplexMatch(-20, -20, '', None)
+assert NO_MATCH.org_score == -20
+assert NO_MATCH.text_score == -20
+assert NO_MATCH.found_name == ''
+assert NO_MATCH.tax_id is None
+
+
+class FirmFinder(object):
+
+    def __init__(self, index_location):
+        self.taxid_to_names = self._get_taxid_to_names(index_location)
+        self.name_to_taxids = self._get_name_to_taxids(index_location)
+
+    def find_complex(self, firm_name):
+        score = MatchScorer(firm_name, self.taxid_to_names).score
+        tax_ids = self.name_to_taxids(firm_name)
+        matches = sorted(score(tax_id) for tax_id in tax_ids)
+        return matches.pop() if matches else NO_MATCH
+
+    def _get_taxid_to_names(self, index_location):
+        # returns a function
+        taxid_to_names = TaxidToNamesIndex(location=index_location)
+        taxid_to_names.open()
+        return taxid_to_names.find
+
+    def _get_name_to_taxids(self, index_location):
+        # returns a function
+        name_to_taxids = NameToTaxidsIndex(location=index_location)
+        name_to_taxids.open()
+        _find = name_to_taxids.find
+
+        def find(name):
+            return set(firm_id.tax_id for firm_id in _find(name))
+        return find
+
+
+class MatchScorer(object):
+
+    def __init__(self, name, taxid_to_names):
+        self.name = name
+        self.parsed = parse_firm_name(name)
+        self.taxid_to_names = taxid_to_names
+
+    def score(self, taxid):
+        '''
+            Find best matching name with taxid.
+        '''
+        max_name = ComplexMatch(-10, -10, '', taxid)
+        for name in self.taxid_to_names(taxid):
+            parsed = parse_firm_name(name)
+            # org_score
+            if self.parsed.organization is None:
+                # we *WERE NOT* given an initial organization
+                org_score = 1
+            elif parsed.organization is None:
+                # could not parse the organization
+                org_score = 0
+            elif self.parsed.organization == parsed.organization:
+                org_score = 2
+            else:
+                # do not match
+                org_score = -1
+            text_score = self.text_score(self.parsed.name, parsed.name)
+            max_name = max(max_name, ComplexMatch(org_score, text_score, name, taxid))
+        return max_name
+
+    def text_score(self, text1, text2):
+        sm = difflib.SequenceMatcher(a=text1.lower(), b=text2.lower())
+        return sm.ratio()
 
 
 if __name__ == '__main__':
