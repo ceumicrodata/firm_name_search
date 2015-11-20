@@ -59,7 +59,7 @@ def main(argv, version):
         'output_csv', type=FileSource,
         help='output csv file')
     parser.add_argument(
-        '--taxid',
+        '--taxid', '--tax_id', dest='tax_id',
         default='tax_id',
         help='output field for found tax_id (default: %(default)s)')
     parser.add_argument(
@@ -88,40 +88,93 @@ def main(argv, version):
         help='Show version info')
     args = parser.parse_args(argv)
 
-    petl.io.tocsv(_find_firms(args), args.output_csv, encoding='utf-8')
+    match_fields = ComplexMatch(
+        args.org_score, args.text_score, args.found_name, args.tax_id)
+    #
+    csv_input = iter(petl.io.fromcsv(args.input_csv, encoding='utf-8'))
+    output = add_complex_matches(
+        csv_input, FirmFinder(args.index), args.firm_name_field, match_fields)
+
+    try:
+        petl.io.tocsv(output, args.output_csv, encoding='utf-8')
+    except InvalidParameterError as e:
+        sys.stderr.write('ERROR: ')
+        sys.stderr.write(str(e))
+        sys.stderr.write('\n')
+        return 1
 
 
-def _find_firms(args):
-    input_source = petl.io.fromcsv(args.input_csv, encoding='utf-8')
-
-    input = iter(input_source)
-    header = next(input)
-    assert args.firm_name_field in header
-    assert args.taxid not in header
-    assert args.text_score not in header
-    assert args.org_score not in header
-    assert args.found_name not in header
-
-    get_firm_name = operator.itemgetter(header.index(args.firm_name_field))
-    find_complex = FirmFinder(args.index).find_complex
-
-    yield (
-        tuple(header) +
-        (args.org_score, args.text_score, args.found_name, args.taxid))
-
-    for row in input:
-        match = find_complex(get_firm_name(row))
-        yield (
-            tuple(row) +
-            (match.org_score, match.text_score, match.found_name, match.tax_id))
-
-
-ComplexMatch = namedtuple('ComplexMatch', 'org_score text_score found_name tax_id')
+ComplexMatch = namedtuple(
+    'ComplexMatch',
+    'org_score text_score found_name tax_id')
 NO_MATCH = ComplexMatch(-20, -20, '', None)
 assert NO_MATCH.org_score == -20
 assert NO_MATCH.text_score == -20
 assert NO_MATCH.found_name == ''
 assert NO_MATCH.tax_id is None
+
+
+def add_complex_matches(csv_input, firm_finder, firm_name_field, match_fields):
+    '''
+        Generate CSV compatible output by extending input with resolved firms
+    '''
+    def _output_row(row, match):
+        return (
+            tuple(row) +
+            (
+                match.org_score,
+                match.text_score,
+                match.found_name,
+                match.tax_id))
+
+    header = next(csv_input)
+
+    if firm_name_field not in header:
+        raise FirmNameFieldNotFoundError(firm_name_field, header)
+    if set(match_fields).intersection(set(header)):
+        raise OverlappingFieldNamesError(match_fields, header)
+
+    _firm_name = operator.itemgetter(header.index(firm_name_field))
+    _find_complex = firm_finder.find_complex
+
+    yield _output_row(header, match_fields)
+    for row in csv_input:
+        yield _output_row(row, _find_complex(_firm_name(row)))
+
+
+class InvalidParameterError(StandardError):
+    pass
+
+
+class FirmNameFieldNotFoundError(InvalidParameterError):
+
+    def __init__(self, firm_name_field, header):
+        self.firm_name_field = firm_name_field
+        self.header = header
+
+    def __str__(self):
+        return (
+            'Firm name field {} was not found in input {}'
+            .format(repr(self.firm_name_field), tuple(self.header)))
+
+
+class OverlappingFieldNamesError(InvalidParameterError):
+
+    def __init__(self, new_fields, header):
+        self.new_fields = new_fields
+        self.header = header
+
+    def __str__(self):
+        overlap = set(self.new_fields).intersection(set(self.header))
+        if len(overlap) == 1:
+            return (
+                'Column {} is already defined {}'
+                .format(repr(overlap.pop()), tuple(self.header)))
+        return (
+            'Columns {} are already defined {}'
+            .format(
+                ', '.join(repr(name) for name in sorted(overlap)),
+                tuple(self.header)))
 
 
 class FirmFinder(object):
@@ -180,7 +233,9 @@ class MatchScorer(object):
                 # do not match
                 org_score = -1
             text_score = self.text_score(self.parsed.name, parsed.name)
-            max_name = max(max_name, ComplexMatch(org_score, text_score, name, taxid))
+            max_name = max(
+                max_name,
+                ComplexMatch(org_score, text_score, name, taxid))
         return max_name
 
     def text_score(self, text1, text2):
