@@ -107,6 +107,7 @@ def log_to_stderr(msg):
 
 
 def create(index_file_path, inputs, progress=log_to_stderr):
+    progress('Creating index {} ...'.format(index_file_path))
     name_to_tax_ids = SqliteConstantMap(
         database=index_file_path, tablename='name_to_tax_ids')
     tax_id_to_names = SqliteConstantMap(
@@ -116,7 +117,7 @@ def create(index_file_path, inputs, progress=log_to_stderr):
 
     # build db
     r0_filename = inputs['rovat_0_csv']
-    progress('reading {}'.format(r0_filename))
+    progress('- reading {}'.format(r0_filename))
     cegid_to_taxid = {
         r.ceg_id: r.tax_id
         for r in read_csv(
@@ -125,7 +126,7 @@ def create(index_file_path, inputs, progress=log_to_stderr):
 
     def populate(input):
         filename = inputs[input]
-        progress('reading {}'.format(filename))
+        progress('- reading {}'.format(filename))
 
         for i, r in enumerate(read_csv(filename, 'nev', 'ceg_id'), 1):
             if i % 100000 == 0:
@@ -140,7 +141,7 @@ def create(index_file_path, inputs, progress=log_to_stderr):
     try:
         populate('rovat_2_csv')
         populate('rovat_3_csv')
-        progress('indexing...')
+        progress('- indexing...')
         name_to_tax_ids.create_index()
         tax_id_to_names.create_index()
     except:
@@ -148,7 +149,7 @@ def create(index_file_path, inputs, progress=log_to_stderr):
         name_to_tax_ids.drop()
         tax_id_to_names.drop()
         raise
-    progress('index successfully created!')
+    progress('Index {} successfully created!'.format(index_file_path))
 
 
 if __name__ == '__main__':
