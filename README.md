@@ -1,23 +1,63 @@
+## Build
+
+Requirements:
+- linux box (generates a version for windows as well!)
+- [doit](http://pydoit.org/) (available as an Ubuntu package)
+
+Run
+```
+doit build
+```
+
+which generates the files:
+- `name-to-taxids-YYYY-MM-DD` for linux & mac
+- `name-to-taxids-YYYY-MM-DD.cmd` for windows
+
+
 ## Install
 
-Building most probably requires a linux box, the generated file will run on all platforms with python2.
+Copy the generated `name-to-taxids-YYYY-MM-DD` file (`name-to-taxids-YYYY-MM-DD.cmd` version for windows) to somewhere on your PATH.
+
+
+## Use
+
+Requirements:
+- Python2 and the tool must be available on the PATH
+- a proprietary database index file (available only to members of CEU MicroData)
 
 ```
-make build
+name-to-taxids-YYYY-MM-DD "firm name" input.csv output.csv
 ```
 
-Copy the generated `name-to-taxids-YYYY-MM-DD.pyz` to wherever you want, this file is the program file.
-Note that for running the tool you will also need a database.
-That database is not included, it is licensed to us.
+where "firm name" is the field name for firm name in `input.csv` and there is an index file in the current directory with name `complex_firms.sqlite`.
 
-## Usage
+The tool provides command line help, so for further details run 
 
 ```
-python name-to-taxids-YYYY-MM-DD.pyz "firm name" input.csv output.csv
+name-to-taxids-YYYY-MM-DD -h
 ```
 
-where "firm name" is the csv header for firm name in `input.csv`.
+
+## Use from Python programs
+
+Put `git+https://github.com/ceumicrodata/firm_name_search.git` in the
+`requirements.txt` file.
+
+```python
+from firm_name_search.name_to_taxid import FirmFinder
+
+finder = FirmFinder(index_file_location)
+for firm_name in ...:
+    match = finder.find_complex(firm_name)
+    # process match
+```
+
+`FirmFinder.find_complex()` expects a single unicode firm name parameter which it will resolve to a match object with at least these attributes:
+- `org_score`
+- `text_score`
+- `found_name`
+- `tax_id`
 
 ----
 
-If you are curious how the `.pyz` file works, see https://www.python.org/dev/peps/pep-0441/ and its links.
+If you are curious how the tool works without explicitly calling python, see https://www.python.org/dev/peps/pep-0441/ and its links.
