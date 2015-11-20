@@ -14,7 +14,7 @@ from petl.io.sources import FileSource
 import sys
 import textwrap
 
-from .search import NameToTaxidsIndex, TaxidToNamesIndex
+from .index import NameToTaxidsIndex, TaxidToNamesIndex
 from .parse_firm_name import parse as parse_firm_name
 
 

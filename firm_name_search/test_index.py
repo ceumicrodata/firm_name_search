@@ -5,7 +5,7 @@ from __future__ import absolute_import
 
 import fixtures
 from testtools import TestCase
-from . import search as m
+from . import index as m
 from .build_index import create as build_index
 
 import os

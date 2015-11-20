@@ -14,7 +14,7 @@ import sys
 
 from .db import SqliteConstantMap
 from .names import maybe_valid_name
-from .search import heads
+from .index import heads
 
 
 def single_matching_file(pattern):
