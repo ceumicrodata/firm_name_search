@@ -7,6 +7,7 @@ from __future__ import division
 import argparse
 from collections import namedtuple
 import difflib
+import itertools
 import operator
 import os
 import petl
@@ -59,6 +60,9 @@ def main(argv, version):
         'output_csv', type=FileSource,
         help='output csv file')
     parser.add_argument(
+        '-x', '--extramatches', default=0, action='count',
+        help='''output multiple matches, specify multiple times to increment''')
+    parser.add_argument(
         '--taxid', '--tax_id', dest='tax_id',
         default='tax_id',
         help='output field for found tax_id (default: %(default)s)')
@@ -88,12 +92,11 @@ def main(argv, version):
         help='Show version info')
     args = parser.parse_args(argv)
 
-    match_fields = ComplexMatch(
-        args.org_score, args.text_score, args.found_name, args.tax_id)
+    match_fields = ComplexMatch(args.org_score, args.text_score, args.found_name, args.tax_id)
     #
     csv_input = iter(petl.io.fromcsv(args.input_csv, encoding='utf-8'))
     output = add_complex_matches(
-        csv_input, FirmFinder(args.index), args.firm_name_field, match_fields)
+        csv_input, FirmFinder(args.index), args.firm_name_field, match_fields, args.extramatches)
 
     try:
         petl.io.tocsv(output, args.output_csv, encoding='utf-8')
@@ -114,30 +117,33 @@ assert NO_MATCH.found_name == ''
 assert NO_MATCH.tax_id is None
 
 
-def add_complex_matches(csv_input, firm_finder, firm_name_field, match_fields):
+def add_complex_matches(csv_input, firm_finder, firm_name_field, match_fields, extramatches):
     '''
         Generate CSV compatible output by extending input with resolved firms
     '''
-    def _output_row(row, match):
-        return (
-            tuple(row) +
-            (
-                match.org_score,
-                match.text_score,
-                match.found_name,
-                match.tax_id))
+    def _name(base, i):
+        return '{}_{}'.format(base, i) if i else base
+
+    output_fields = [_name(f, i) for i in range(extramatches + 1) for f in match_fields]
+
+    def _output_row(row, matches):
+        output = tuple(row)
+        for i, match in enumerate(itertools.chain(matches, itertools.repeat(NO_MATCH, 1 + extramatches))):
+            output += match
+            if i == extramatches:
+                return output
 
     header = next(csv_input)
 
     if firm_name_field not in header:
         raise FirmNameFieldNotFoundError(firm_name_field, header)
-    if set(match_fields).intersection(set(header)):
-        raise OverlappingFieldNamesError(match_fields, header)
+    if set(output_fields).intersection(set(header)):
+        raise OverlappingFieldNamesError(output_fields, header)
 
     _firm_name = operator.itemgetter(header.index(firm_name_field))
     _find_complex = firm_finder.find_complex
 
-    yield _output_row(header, match_fields)
+    yield list(header) + output_fields
     for row in csv_input:
         yield _output_row(row, _find_complex(_firm_name(row)))
 
@@ -184,10 +190,13 @@ class FirmFinder(object):
         self.name_to_taxids = self._get_name_to_taxids(index_location)
 
     def find_complex(self, firm_name):
+        '''
+            Translate firm_name to list of possible matches ordered by scores.
+        '''
         score = MatchScorer(firm_name, self.taxid_to_names).score
         tax_ids = self.name_to_taxids(firm_name)
-        matches = sorted(score(tax_id) for tax_id in tax_ids)
-        return matches.pop() if matches else NO_MATCH
+        matches = sorted((score(tax_id) for tax_id in tax_ids), reverse=True)
+        return matches
 
     def _get_taxid_to_names(self, index_location):
         # returns a function
