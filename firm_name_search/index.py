@@ -105,20 +105,19 @@ class NameToTaxidsIndex(Index):
 
         for head in heads(name):
             tax_ids = name_to_tax_ids[head]
-            overrun = not tax_ids
 
-            if overrun:
-                head = candidate_head
-                tax_ids = candidates
-                break
+            if tax_ids:
+                unique_match = len(tax_ids) == 1
 
-            unique_match = len(tax_ids) == 1
+                if unique_match:
+                    break
 
-            if unique_match:
-                break
+                candidate_head = head
+                candidates = tax_ids
 
-            candidate_head = head
-            candidates = tax_ids
+        if not tax_ids and candidates:
+            head = candidate_head
+            tax_ids = candidates
 
         if not tax_ids:
             return []
