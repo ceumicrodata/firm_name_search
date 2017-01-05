@@ -4,8 +4,6 @@ from __future__ import print_function
 from __future__ import absolute_import
 from __future__ import division
 
-import sqlite3
-
 
 class SqliteConstantMap(object):
 
@@ -17,7 +15,7 @@ class SqliteConstantMap(object):
 
     def __init__(self, database, tablename):
         self.TABLE = tablename
-        self.db = sqlite3.connect(database)
+        self.db = database
         self.cursor = self.db.cursor()
         self.exists = bool(
             list(self.fetchall(self.sql_table_exists, tablename=self.TABLE)))

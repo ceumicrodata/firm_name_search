@@ -5,6 +5,7 @@ from __future__ import absolute_import
 from __future__ import division
 
 from abc import ABCMeta, abstractmethod, abstractproperty
+import sqlite3
 
 from .db import SqliteConstantMap
 from . import normalizations
@@ -92,8 +93,7 @@ class NameToTaxidsIndex(Index):
         return self.name_to_tax_ids.exists
 
     def open(self):
-        self.name_to_tax_ids = SqliteConstantMap(
-            database=self.location, tablename='name_to_tax_ids')
+        self.name_to_tax_ids = SqliteConstantMap(sqlite3.connect(self.location), tablename='name_to_tax_ids')
         super(NameToTaxidsIndex, self).open()
 
     def find(self, name):
@@ -137,8 +137,7 @@ class TaxidToNamesIndex(Index):
         return self.tax_id_to_names.exists
 
     def open(self):
-        self.tax_id_to_names = SqliteConstantMap(
-            database=self.location, tablename='tax_id_to_names')
+        self.tax_id_to_names = SqliteConstantMap(sqlite3.connect(self.location), tablename='tax_id_to_names')
         super(TaxidToNamesIndex, self).open()
 
     def find(self, tax_id):

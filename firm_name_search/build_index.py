@@ -7,6 +7,7 @@ from __future__ import division
 import argparse
 from collections import namedtuple
 from glob import glob
+import sqlite3
 import operator
 import os
 import petl
@@ -108,12 +109,10 @@ def log_to_stderr(msg):
 
 def create(index_file_path, inputs, progress=log_to_stderr):
     progress('Creating index {} ...'.format(index_file_path))
-    name_to_tax_ids = SqliteConstantMap(
-        database=index_file_path, tablename='name_to_tax_ids')
-    tax_id_to_names = SqliteConstantMap(
-        database=index_file_path, tablename='tax_id_to_names')
-    # FIXME: this is a hack, they should share the connection directly
-    tax_id_to_names.db = name_to_tax_ids.db
+    database = sqlite3.connect(index_file_path)
+    # NOTE: database is shared between maps
+    name_to_tax_ids = SqliteConstantMap(database, tablename='name_to_tax_ids')
+    tax_id_to_names = SqliteConstantMap(database, tablename='tax_id_to_names')
 
     # build db
     r0_filename = inputs['rovat_0_csv']
