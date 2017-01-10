@@ -34,7 +34,7 @@ def main(argv, version):
     ww = _wordwrap
 
     description = '\n'.join((
-        ww('Add tax_id to input by searching for the firm name'),
+        ww('Add firm_id to input by searching for the firm name'),
         '',
         ww(
             '''\
@@ -63,20 +63,20 @@ def main(argv, version):
         '-x', '--extramatches', default=0, action='count',
         help='''output multiple matches, specify multiple times to increment''')
     parser.add_argument(
-        '--taxid', '--tax_id', dest='tax_id',
-        default='tax_id',
-        help='output field for found tax_id (default: %(default)s)')
+        '--firm_id', dest='firm_id',
+        default='firm_id',
+        help='output field for found firm_id (default: %(default)s)')
     parser.add_argument(
         '--text_score',
         default='text_score',
         help=(
-            '''output field for found tax_id's text score
+            '''output field for found firm_id's text score
             (default: %(default)s)'''))
     parser.add_argument(
         '--org_score',
         default='org_score',
         help=(
-            '''output field for found tax_id's organization score
+            '''output field for found firm_id's organization score
             (default: %(default)s)'''))
     parser.add_argument(
         '--found_name',
@@ -92,7 +92,7 @@ def main(argv, version):
         help='Show version info')
     args = parser.parse_args(argv)
 
-    match_fields = ComplexMatch(args.org_score, args.text_score, args.found_name, args.tax_id)
+    match_fields = Match(args.org_score, args.text_score, args.found_name, args.firm_id)
     #
     csv_input = iter(petl.io.fromcsv(args.input_csv, encoding='utf-8'))
     output = add_complex_matches(
@@ -107,14 +107,14 @@ def main(argv, version):
         return 1
 
 
-ComplexMatch = namedtuple(
-    'ComplexMatch',
-    'org_score text_score found_name tax_id')
-NO_MATCH = ComplexMatch(-20, -20, '', None)
+Match = namedtuple(
+    'Match',
+    'org_score text_score found_name firm_id')
+NO_MATCH = Match(-20, -20, '', None)
 assert NO_MATCH.org_score == -20
 assert NO_MATCH.text_score == -20
 assert NO_MATCH.found_name == ''
-assert NO_MATCH.tax_id is None
+assert NO_MATCH.firm_id is None
 
 
 def add_complex_matches(csv_input, firm_finder, firm_name_field, match_fields, extramatches):
@@ -186,48 +186,48 @@ class OverlappingFieldNamesError(InvalidParameterError):
 class FirmFinder(object):
 
     def __init__(self, index_location):
-        self.taxid_to_names = self._get_taxid_to_names(index_location)
-        self.name_to_taxids = self._get_name_to_taxids(index_location)
+        self.get_names = self._get_taxid_to_names(index_location)
+        self.get_firm_ids = self._get_name_to_taxids(index_location)
 
     def find_complex(self, firm_name):
         '''
             Translate firm_name to list of possible matches ordered by scores.
         '''
-        score = MatchScorer(firm_name, self.taxid_to_names).score
-        tax_ids = self.name_to_taxids(firm_name)
-        matches = sorted((score(tax_id) for tax_id in tax_ids), reverse=True)
+        score = MatchScorer(firm_name, self.get_names).score
+        firm_ids = self.get_firm_ids(firm_name)
+        matches = sorted((score(firm_id) for firm_id in firm_ids), reverse=True)
         return matches
 
     def _get_taxid_to_names(self, index_location):
         # returns a function
-        taxid_to_names = TaxidToNamesIndex(location=index_location)
-        taxid_to_names.open()
-        return taxid_to_names.find
+        index = TaxidToNamesIndex(index_location)
+        index.open()
+        return index.find
 
     def _get_name_to_taxids(self, index_location):
         # returns a function
-        name_to_taxids = NameToTaxidsIndex(location=index_location)
-        name_to_taxids.open()
-        _find = name_to_taxids.find
+        index = NameToTaxidsIndex(index_location)
+        index.open()
+        _find = index.find
 
         def find(name):
-            return set(firm_id.tax_id for firm_id in _find(name))
+            return set(match.firm_id for match in _find(name))
         return find
 
 
 class MatchScorer(object):
 
-    def __init__(self, name, taxid_to_names):
+    def __init__(self, name, get_names):
         self.name = name
         self.parsed = parse_firm_name(name)
-        self.taxid_to_names = taxid_to_names
+        self.get_names = get_names
 
-    def score(self, taxid):
+    def score(self, firm_id):
         '''
-            Find best matching name with taxid.
+            Find best matching name with firm_id.
         '''
-        max_name = ComplexMatch(-10, -10, '', taxid)
-        for name in self.taxid_to_names(taxid):
+        max_name = Match(-10, -10, '', firm_id)
+        for name in self.get_names(firm_id):
             parsed = parse_firm_name(name)
             # org_score
             if self.parsed.organization is None:
@@ -244,7 +244,7 @@ class MatchScorer(object):
             text_score = self.text_score(self.parsed.name, parsed.name)
             max_name = max(
                 max_name,
-                ComplexMatch(org_score, text_score, name, taxid))
+                Match(org_score, text_score, name, firm_id))
         return max_name
 
     def text_score(self, text1, text2):
