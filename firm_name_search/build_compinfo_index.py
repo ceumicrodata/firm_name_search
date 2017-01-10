@@ -15,6 +15,7 @@ import sys
 
 from .db import SqliteConstantMap
 from .index import heads
+from .transliterate_cyrillic import transliterate_to_hungarian
 
 
 def error(parser, msg):
@@ -88,10 +89,13 @@ def create(compinfo_csv, index_file_path, progress=log_to_stderr):
         for i, r in enumerate(read_csv(compinfo_csv, 'companyname', 'bvdidnumber'), 1):
             if i % 100000 == 0:
                 progress(i)
+
             id = r.bvdidnumber
-            for head in heads(r.companyname):
+            companyname = transliterate_to_hungarian(r.companyname)
+
+            for head in heads(companyname):
                 name_to_tax_ids.add(head, id)
-            tax_id_to_names.add(id, r.companyname)
+            tax_id_to_names.add(id, companyname)
         
         progress('- indexing...')
         name_to_tax_ids.create_index()
