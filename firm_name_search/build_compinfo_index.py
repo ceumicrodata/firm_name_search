@@ -6,7 +6,6 @@ from __future__ import division
 
 import argparse
 from collections import namedtuple
-from glob import glob
 import sqlite3
 import operator
 import os
