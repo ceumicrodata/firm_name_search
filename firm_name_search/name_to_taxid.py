@@ -95,7 +95,7 @@ def main(argv, version):
     match_fields = Match(args.org_score, args.text_score, args.found_name, args.firm_id)
     #
     csv_input = iter(petl.io.fromcsv(args.input_csv, encoding='utf-8'))
-    output = add_complex_matches(
+    output = add_matches(
         csv_input, FirmFinder(args.index), args.firm_name_field, match_fields, args.extramatches)
 
     try:
@@ -117,7 +117,7 @@ assert NO_MATCH.found_name == ''
 assert NO_MATCH.firm_id is None
 
 
-def add_complex_matches(csv_input, firm_finder, firm_name_field, match_fields, extramatches):
+def add_matches(csv_input, firm_finder, firm_name_field, match_fields, extramatches):
     '''
         Generate CSV compatible output by extending input with resolved firms
     '''
