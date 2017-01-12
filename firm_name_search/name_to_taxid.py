@@ -64,7 +64,7 @@ def main(argv, version):
         help='''output multiple matches, specify multiple times to increment''')
     parser.add_argument(
         '--firm_id', dest='firm_id',
-        default='firm_id',
+        default='tax_id',
         help='output field for found firm_id (default: %(default)s)')
     parser.add_argument(
         '--text_score',
