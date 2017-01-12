@@ -11,32 +11,6 @@ from .db import SqliteConstantMap
 from . import normalizations
 
 
-class FirmId(object):
-
-    def __init__(self, tax_id=None, pir=None):
-        self.tax_id = tax_id
-        self.pir = pir
-
-    @property
-    def as_tuple(self):
-        return (self.tax_id, self.pir)
-
-    def __hash__(self):
-        return hash(self.as_tuple)
-
-    def __eq__(self, other):
-        return self.as_tuple == other.as_tuple
-
-    def __repr__(self):
-        if self.pir is None:
-            return 'TaxId({0.tax_id})'.format(self)
-        if self.tax_id is None:
-            return 'PIR({0.pir})'.format(self)
-        return (
-            '{0.__class__.__name__}(tax_id={0.tax_id}, pir={0.pir})'
-        ).format(self)
-
-
 class MissingIndexError(StandardError):
     pass
 
@@ -60,7 +34,7 @@ class Index(object):
     @abstractmethod
     def find(self, name):
         '''
-        -> Matches={score: {FirmId})}
+        -> Matches={score: {firm-id})}
         '''
         raise NotImplementedError
 
@@ -119,15 +93,10 @@ class NameToTaxidsIndex(Index):
             head = candidate_head
             tax_ids = candidates
 
-        if not tax_ids:
-            return []
-
         if len(tax_ids) > 100:
-            # too many - do not bother
-            firm_ids = [FirmId('*'), FirmId('TOOMANY'), FirmId('*')]
-        else:
-            firm_ids = set(FirmId(tax_id=tax_id) for tax_id in tax_ids)
-        return firm_ids
+            # too many similar - do not bother finding the correct one
+            tax_ids = {'TOOMANY'}
+        return tax_ids
 
 
 class TaxidToNamesIndex(Index):

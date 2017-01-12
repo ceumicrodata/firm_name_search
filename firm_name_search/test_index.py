@@ -133,12 +133,10 @@ class TestNameToTaxidsIndex(TestCase):
 
     def then_firms_can_be_found(self):
         tax_ids = self.index.find('Ganz')
-        self.assertEqual(
-            set([m.FirmId(tax_id='10001789'), m.FirmId(tax_id='10001459')]),
-            tax_ids)
+        self.assertEqual({'10001789', '10001459'}, tax_ids)
 
         tax_ids = self.index.find('Ganz Villamossági Művek')
-        self.assertEqual(set([m.FirmId(tax_id='10001789')]), tax_ids)
+        self.assertEqual({'10001789'}, tax_ids)
 
 
 class TestTaxidToNamesIndex(TestCase):
@@ -197,28 +195,3 @@ class TestTaxidToNamesIndex(TestCase):
                 'Magyar Hajó- és Darugyár']),
             self.index.find('10001459'))
 
-
-class Test_FirmId(TestCase):  # noqa
-
-    def test_equality(self):
-        self.assertEqual(
-            m.FirmId(tax_id='tax_id'),
-            m.FirmId(tax_id='tax_id', pir=None))
-
-        self.assertNotEqual(
-            m.FirmId(tax_id='tax_id'),
-            m.FirmId(tax_id='tax_id', pir='None'))
-
-        self.assertEqual(
-            m.FirmId(pir='pir'),
-            m.FirmId(pir='pir', tax_id=None))
-
-        self.assertNotEqual(
-            m.FirmId(pir='pir'),
-            m.FirmId(pir='pir', tax_id='None'))
-
-    def test_repr(self):
-        self.assertEqual('PIR(1)', repr(m.FirmId(pir='1')))
-        self.assertEqual('TaxId(1)', repr(m.FirmId(tax_id='1')))
-        self.assertEqual(
-            'FirmId(tax_id=1, pir=2)', repr(m.FirmId(tax_id='1', pir='2')))

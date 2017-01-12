@@ -87,6 +87,10 @@ def main(argv, version):
             (default: %(default)s)
             '''))
     parser.add_argument(
+        '--do-not-parse-org', dest='parse_org',
+        default=True, action='store_false',
+        help='use text as is, do not try to parse as Hungarian firm name to extract organization type')
+    parser.add_argument(
         '-V', '--version', action='version',
         version='%(prog)s {}'.format(version),
         help='Show version info')
@@ -95,8 +99,12 @@ def main(argv, version):
     match_fields = Match(args.org_score, args.text_score, args.found_name, args.firm_id)
     #
     csv_input = iter(petl.io.fromcsv(args.input_csv, encoding='utf-8'))
-    output = add_matches(
-        csv_input, FirmFinder(args.index), args.firm_name_field, match_fields, args.extramatches)
+    if args.parse_org:
+        scorer = ParsingMatchScorer
+    else:
+        scorer = Scorer
+    finder = FirmFinder(args.index, scorer)
+    output = add_matches(csv_input, finder, args.firm_name_field, match_fields, args.extramatches)
 
     try:
         petl.io.tocsv(output, args.output_csv, encoding='utf-8')
@@ -183,39 +191,28 @@ class OverlappingFieldNamesError(InvalidParameterError):
                 tuple(self.header)))
 
 
-class FirmFinder(object):
+class Scorer(object):
 
-    def __init__(self, index_location):
-        self.get_names = self._get_taxid_to_names(index_location)
-        self.get_firm_ids = self._get_name_to_taxids(index_location)
+    def __init__(self, name, get_names):
+        self.name = name
+        self.get_names = get_names
 
-    def find_firm(self, firm_name):
+    def score(self, firm_id):
         '''
-            Translate firm_name to list of possible matches ordered by scores.
+            Find best matching name with firm_id.
         '''
-        score = MatchScorer(firm_name, self.get_names).score
-        firm_ids = self.get_firm_ids(firm_name)
-        matches = sorted((score(firm_id) for firm_id in firm_ids), reverse=True)
-        return matches
+        org_score = 0
+        best_match = NO_MATCH
+        for name in self.get_names(firm_id):
+            match = Match(org_score, self.text_score(name), name, firm_id)
+            best_match = max(best_match, match)
+        return best_match
 
-    def _get_taxid_to_names(self, index_location):
-        # returns a function
-        index = TaxidToNamesIndex(index_location)
-        index.open()
-        return index.find
-
-    def _get_name_to_taxids(self, index_location):
-        # returns a function
-        index = NameToTaxidsIndex(index_location)
-        index.open()
-        _find = index.find
-
-        def find(name):
-            return set(match.firm_id for match in _find(name))
-        return find
+    def text_score(self, name):
+        return difflib.SequenceMatcher(a=self.name.lower(), b=name.lower()).ratio()
 
 
-class MatchScorer(object):
+class ParsingMatchScorer(object):
 
     def __init__(self, name, get_names):
         self.name = name
@@ -226,7 +223,7 @@ class MatchScorer(object):
         '''
             Find best matching name with firm_id.
         '''
-        max_name = Match(-10, -10, '', firm_id)
+        best_match = NO_MATCH
         for name in self.get_names(firm_id):
             parsed = parse_firm_name(name)
             # org_score
@@ -241,15 +238,41 @@ class MatchScorer(object):
             else:
                 # do not match
                 org_score = -1
-            text_score = self.text_score(self.parsed.name, parsed.name)
-            max_name = max(
-                max_name,
-                Match(org_score, text_score, name, firm_id))
-        return max_name
+            match = Match(org_score, self.text_score(parsed.name), name, firm_id)
+            best_match = max(best_match, match)
+        return best_match
 
-    def text_score(self, text1, text2):
-        sm = difflib.SequenceMatcher(a=text1.lower(), b=text2.lower())
-        return sm.ratio()
+    def text_score(self, name):
+        return difflib.SequenceMatcher(a=self.parsed.name.lower(), b=name.lower()).ratio()
+
+
+class FirmFinder(object):
+
+    def __init__(self, index_location, scorer=ParsingMatchScorer):
+        self.get_names = self._get_taxid_to_names(index_location)
+        self.get_firm_ids = self._get_name_to_taxids(index_location)
+        self.scorer = scorer
+
+    def find_firm(self, firm_name):
+        '''
+            Translate firm_name to list of possible matches ordered by scores.
+        '''
+        score = self.scorer(firm_name, self.get_names).score
+        firm_ids = self.get_firm_ids(firm_name)
+        matches = sorted((score(firm_id) for firm_id in firm_ids), reverse=True)
+        return matches
+
+    def _get_taxid_to_names(self, index_location):
+        # returns a function
+        index = TaxidToNamesIndex(index_location)
+        index.open()
+        return index.find
+
+    def _get_name_to_taxids(self, index_location):
+        # returns a function
+        index = NameToTaxidsIndex(index_location)
+        index.open()
+        return index.find
 
 
 if __name__ == '__main__':
