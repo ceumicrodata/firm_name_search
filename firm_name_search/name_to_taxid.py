@@ -141,11 +141,11 @@ def add_complex_matches(csv_input, firm_finder, firm_name_field, match_fields, e
         raise OverlappingFieldNamesError(output_fields, header)
 
     _firm_name = operator.itemgetter(header.index(firm_name_field))
-    _find_complex = firm_finder.find_complex
+    _find_firm = firm_finder.find_firm
 
     yield list(header) + output_fields
     for row in csv_input:
-        yield _output_row(row, _find_complex(_firm_name(row)))
+        yield _output_row(row, _find_firm(_firm_name(row)))
 
 
 class InvalidParameterError(StandardError):
@@ -189,7 +189,7 @@ class FirmFinder(object):
         self.get_names = self._get_taxid_to_names(index_location)
         self.get_firm_ids = self._get_name_to_taxids(index_location)
 
-    def find_complex(self, firm_name):
+    def find_firm(self, firm_name):
         '''
             Translate firm_name to list of possible matches ordered by scores.
         '''

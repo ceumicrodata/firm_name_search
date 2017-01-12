@@ -48,11 +48,11 @@ from firm_name_search.name_to_taxid import FirmFinder
 
 finder = FirmFinder(index_file_location)
 for firm_name in ...:
-    match = finder.find_complex(firm_name)
+    match = finder.find_firm(firm_name)
     # process match
 ```
 
-`FirmFinder.find_complex()` expects a single unicode firm name parameter which it will resolve to a match object with at least these attributes:
+`FirmFinder.find_firm()` expects a single unicode firm name parameter which it will resolve to a match object with at least these attributes:
 - `org_score`
 - `text_score`
 - `found_name`
