@@ -17,6 +17,7 @@ import textwrap
 
 from .index import NameToTaxidsIndex, TaxidToNamesIndex
 from .parse_firm_name import parse as parse_firm_name
+from .score import multiword_fuzzy_partial_ratio
 
 
 def _get_terminal_width():
@@ -87,9 +88,9 @@ def main(argv, version):
             (default: %(default)s)
             '''))
     parser.add_argument(
-        '--do-not-parse-org', dest='parse_org',
-        default=True, action='store_false',
-        help='use text as is, do not try to parse as Hungarian firm name to extract organization type')
+        '--scorer', choices='org difflib fuzzy'.split(),
+        default='org',
+        help='type of scorer to use (org=parse and compare as Hungarian firm name) (difflib=text compare) (fuzzy=reorder words and handle typos) (%(default)s)')
     parser.add_argument(
         '-V', '--version', action='version',
         version='%(prog)s {}'.format(version),
@@ -99,11 +100,11 @@ def main(argv, version):
     match_fields = Match(args.org_score, args.text_score, args.found_name, args.firm_id)
     #
     csv_input = iter(petl.io.fromcsv(args.input_csv, encoding='utf-8'))
-    if args.parse_org:
-        scorer = ParsingMatchScorer
-    else:
-        scorer = Scorer
-    finder = FirmFinder(args.index, scorer)
+    scorers = dict(
+        org=ParsingMatchScorer,
+        difflib=DifflibLowercaseScorer,
+        fuzzy=FuzzyPartialScorer)
+    finder = FirmFinder(args.index, scorers[args.scorer])
     output = add_matches(csv_input, finder, args.firm_name_field, match_fields, args.extramatches)
 
     try:
@@ -115,9 +116,7 @@ def main(argv, version):
         return 1
 
 
-Match = namedtuple(
-    'Match',
-    'org_score text_score found_name firm_id')
+Match = namedtuple('Match', 'org_score text_score found_name firm_id')
 NO_MATCH = Match(-20, -20, '', None)
 assert NO_MATCH.org_score == -20
 assert NO_MATCH.text_score == -20
@@ -191,7 +190,7 @@ class OverlappingFieldNamesError(InvalidParameterError):
                 tuple(self.header)))
 
 
-class Scorer(object):
+class _TextScorer(object):
 
     def __init__(self, name, get_names):
         self.name = name
@@ -209,7 +208,20 @@ class Scorer(object):
         return best_match
 
     def text_score(self, name):
+        ''' Compare the given `name` to `self.name` '''
+        raise NotImplementedError
+
+
+class DifflibLowercaseScorer(_TextScorer):
+
+    def text_score(self, name):
         return difflib.SequenceMatcher(a=self.name.lower(), b=name.lower()).ratio()
+
+
+class FuzzyPartialScorer(_TextScorer):
+
+    def text_score(self, name):
+        return multiword_fuzzy_partial_ratio(self.name.lower(), name.lower())
 
 
 class ParsingMatchScorer(object):
